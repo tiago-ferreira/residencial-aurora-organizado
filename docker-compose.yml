@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: residencial-aurora-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: aurora
+      POSTGRES_PASSWORD: aurora
+      POSTGRES_DB: aurora
+    ports:
+      - "5432:5432"
+    volumes:
+      - aurora_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aurora -d aurora"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  aurora_pgdata:

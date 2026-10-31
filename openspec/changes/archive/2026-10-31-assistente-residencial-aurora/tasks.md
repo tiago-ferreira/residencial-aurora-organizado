@@ -1,0 +1,35 @@
+# Tasks
+
+## 1. Bootstrap do Projeto, Dados Base e Infraestrutura PostgreSQL
+
+- [x] 1.1 Obter os arquivos originais de `dados/` (`apartamentos.json`, `areas.json`, `reservas.json`, `visitantes.json`, `regulamento.md`) do repositório base `devfullcycle/mba-ia-desafio-criacao-agente` (inicializando o repositório Git local se necessário) e verificar que os cinco arquivos estão presentes e idênticos aos originais.
+- [x] 1.2 Criar `pyproject.toml` (Python `>=3.12`, versão exata fixada de `google-adk` na série 2 `>=2.2.0`, `fastapi`, `uvicorn`, `sqlalchemy`, driver PostgreSQL, `pydantic-settings`, `pytest`, `httpx`), gerar `uv.lock`, configurar `.gitignore` e criar `.env.example` sem valores secretos, verificando que `uv sync` instala sem erros e nenhuma chave está rastreada pelo Git.
+- [x] 1.3 Criar `docker-compose.yml` com serviço PostgreSQL 16 (volume persistente e *healthcheck*), implementar `src/aurora/config.py` para leitura tipada do `.env` e iniciar o `README.md` com os comandos de infraestrutura na seção **Como rodar**, verificando que `docker compose up -d` deixa o banco saudável e acessível.
+
+## 2. Persistência de Domínio, Exclusividade Concorrente e CLI de Restauração
+
+- [x] 2.1 Implementar o *schema* e modelos SQLAlchemy em `src/aurora/db/` (`apartamentos`, `areas`, `reservas` com coluna `ativa` e índice único parcial `uq_reservas_area_data_ativa` sobre `(area_id, data) WHERE ativa = TRUE`, `SEQUENCE reserva_codigo_seq`, `visitantes` e `confirmacoes_pendentes`), verificando em teste contra o PostgreSQL a criação das tabelas, sequência e índice parcial.
+- [x] 2.2 Implementar os repositórios transacionais de reservas e visitantes em `src/aurora/db/repositories.py` (disponibilidade via `SELECT EXISTS` sem carregar `codigo` ou `apartamento`, inserção atômica gerando códigos inéditos via sequência, captura limpa de `IntegrityError`/`UniqueViolation` e cancelamento restrito ao apartamento titular), verificando com testes automatizados concorrentes no PostgreSQL que duas inserções simultâneas para a mesma área e data gravam exatamente uma reserva ativa e que códigos cancelados nunca se repetem.
+- [x] 2.3 Implementar o utilitário CLI de restauração/seed (`src/aurora/cli.py`) que restaura reservas e visitantes a partir de `dados/*.json` sem modificar os arquivos em `dados/`, documentar o comando de restauração em **Como rodar** e registrar a **Garantia 5** na seção **Garantias** do `README.md`, verificando que executar o comando restaura `RSV-1377` e `Marina Duarte` mantendo `dados/` intacto.
+
+## 3. Consulta Seletiva ao Regulamento Interno
+
+- [x] 3.1 Implementar o parser/indexador por capítulos e seções Markdown de `dados/regulamento.md` (`src/aurora/services/regulamento_index.py`) e as tools `buscar_capitulo_regulamento` (`top_k=1` seção pertinente com remoção de *stopwords* ou retorno apenas de títulos) e `ler_secao_regulamento`, verificando com testes unitários que perguntas sobre horário da piscina aos domingos retornam apenas a seção correspondente sem trechos de outros capítulos.
+- [x] 3.2 Documentar a **Garantia 4** na seção **Garantias** do `README.md` indicando os arquivos e trechos do indexador e das tools de regulamento, verificando que os caminhos e trechos citados existem no código.
+
+## 4. Tools Operacionais e Arquitetura Multiagente no Google ADK
+
+- [x] 4.1 Implementar as tools operacionais de reservas (`listar_minhas_reservas`, `consultar_disponibilidade_area`, `criar_reserva`, `cancelar_minha_reserva`) e visitantes (`listar_meus_visitantes`, `autorizar_visitante`) em `src/aurora/tools/`, extraindo o apartamento exclusivamente de `tool_context.state["apartamento"]` (sem parâmetro `apartamento` na assinatura) e exigindo `tool_context.request_confirmation` somente para áreas com `taxa > 0` e autorização de visitantes, verificando com testes unitários o isolamento entre apartamentos e os estados `None`, `confirmed=False` e `confirmed=True`.
+- [x] 4.2 Implementar o `root_agent` (sem o texto do regulamento nas instruções) e os três especialistas acoplados via `sub_agents` (`reservas_agent`, `visitantes_agent`, `regulamento_agent`) em `src/aurora/agents/`, configurando o `App` com `ResumabilityConfig(is_resumable=True)` e `DatabaseSessionService` conectado ao PostgreSQL, verificando em teste que o `App` inicializa corretamente, possui ao menos dois especialistas e não inclui o regulamento no prompt do agente principal.
+- [x] 4.3 Redigir a seção **Arquitetura** (responsabilidade, acionamento e motivo de cada agente) e documentar as **Garantias 1 e 2** na seção **Garantias** do `README.md`, verificando que todos os arquivos e trechos apontados correspondem ao código implementado.
+
+## 5. Contrato da API HTTP, Retomada de Confirmações e Persistência em Reinícios
+
+- [x] 5.1 Implementar o orquestrador de execução e retomada de sessões ADK em `src/aurora/services/chat_service.py` (criação de sessão com `state={"apartamento": ...}`, extração e persistência de `adk_request_confirmation` em `confirmacoes_pendentes`, atualização atômica `PENDENTE -> RESPONDIDA` com erro `409` para IDs inválidos/repetidos e retomada do `Runner.run_async` com o `invocation_id` salvo), verificando em teste integrado ao PostgreSQL que aprovar executa a ação uma vez, negar não grava nada e repetir o `id` retorna conflito `409`.
+- [x] 5.2 Implementar as rotas FastAPI em `src/aurora/main.py` (`POST /sessoes`, `POST /sessoes/{session_id}/mensagens`, `POST /sessoes/{session_id}/confirmacoes`, `GET /sessoes/{session_id}/eventos`, `GET /apartamentos/{apartamento}/reservas` e `GET /apartamentos/{apartamento}/visitantes`) com seed inicial não destrutivo no startup, verificando com testes de contrato HTTP os códigos `200`, `201`, `404` e `409` e os esquemas JSON exigidos.
+- [x] 5.3 Documentar a **Garantia 3** e o comando de subida da API (`http://localhost:8000`) no `README.md`, verificando que o `README.md` na raiz contém integralmente as seções **Arquitetura**, **Garantias** e **Como rodar** apontando arquivos e trechos válidos.
+
+## 6. Validação Integrada Ponta a Ponta (Fluxo do Avaliador)
+
+- [x] 6.1 Executar validação integrada dos passos 1 a 12 do fluxo do avaliador contra a API ativa em `http://localhost:8000` (tentativas de *prompt injection* e cancelamento contra o `302`, cancelamento próprio sem confirmação, reserva gratuita da quadra, reserva paga negada/aprovada/reenviada com `409`, `id` e sessão inexistentes `409`/`404`, data ocupada sem vazar `RSV-4821` ou `302`, visitante ignorando confirmação textual e consulta ao regulamento da piscina sem capítulos extras nos eventos), verificando todas as respostas e rotas de verificação.
+- [x] 6.2 Executar validação integrada dos passos 13 a 15 do fluxo do avaliador: reiniciar o processo da API sem restaurar dados conferindo preservação da contagem de eventos e continuidade da sessão `S1`, disparar aprovações simultâneas de `salao-de-festas` em `2030-05-11` para `101` e `201` conferindo duas respostas `200` e soma igual a uma reserva, e auditar `dados/` inalterado, ausência de `.env` versionado e versão exata do ADK fixada.
